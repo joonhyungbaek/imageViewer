@@ -1,0 +1,11 @@
+.vs/
+Debug/
+x64/
+ConnectCheck.VC.db
+ConnectCheck.VC.VC.opendb
+config.ini
+ipch/
+CONNECTCHECK-7c6e9573/
+*.ipch
+log.txt
+*.aps
