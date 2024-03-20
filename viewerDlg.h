@@ -8,6 +8,8 @@
 #include "Rotate.h"
 #include "Resize.h"
 #include "Crop.h"
+#include "afxwin.h"
+#include "Raw.h"
 
 using namespace cv;
 // CviewerDlg 대화 상자
@@ -68,7 +70,15 @@ public:
 	bool m_bDragging;
 	static CPoint m_ptStart;
 	static CPoint m_ptLastEnd;
+	static bool isRaw;
+
 	bool m_bWheel;
 	afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
-	int getCvDataFormat(SfxImage2D image);
+	
+	CRaw raw;
+
+	void CviewerDlg::ShowRawImage(cv::Mat& mat);
+
+
+	CStatic m_stPicture;
 };

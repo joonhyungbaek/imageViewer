@@ -195,6 +195,7 @@
   <ItemGroup>
     <ClInclude Include="Crop.h" />
     <ClInclude Include="Flip.h" />
+    <ClInclude Include="Raw.h" />
     <ClInclude Include="Resize.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Rotate.h" />
@@ -206,6 +207,7 @@
   <ItemGroup>
     <ClCompile Include="Crop.cpp" />
     <ClCompile Include="Flip.cpp" />
+    <ClCompile Include="Raw.cpp" />
     <ClCompile Include="Resize.cpp" />
     <ClCompile Include="Rotate.cpp" />
     <ClCompile Include="stdafx.cpp">

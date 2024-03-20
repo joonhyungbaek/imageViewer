@@ -15,7 +15,7 @@ Mat CviewerDlg::m_matImage;
 CRect CviewerDlg::rect;
 CPoint CviewerDlg::m_ptStart;
 CPoint CviewerDlg::m_ptLastEnd;
-
+bool CviewerDlg::isRaw = false;
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
 
 
@@ -63,6 +63,7 @@ void CviewerDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_TAB1, m_tabControl);
+	DDX_Control(pDX, IDC_PC_VIEW, m_stPicture);
 }
 
 BEGIN_MESSAGE_MAP(CviewerDlg, CDialogEx)
@@ -199,7 +200,29 @@ HCURSOR CviewerDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+void CviewerDlg::ShowRawImage(cv::Mat& mat) {
 
+	CImage cImage;
+	// 16비트 이미지를 8비트로 변환 (간단한 방법, 실제 사용 시에는 적절한 스케일링 고려)
+	cv::Mat convertedMat;
+	mat.convertTo(convertedMat, CV_8U, 1.0 / 256.0);
+
+	// CImage 객체 초기화
+	cImage.Create(convertedMat.cols, convertedMat.rows, 24);
+
+	// CImage에 데이터 복사
+	for (int y = 0; y < convertedMat.rows; y++) {
+		char* srcRow = convertedMat.ptr<char>(y);
+		for (int x = 0; x < convertedMat.cols; x++) {
+			unsigned char val = srcRow[x];
+			cImage.SetPixel(x, y, RGB(val, val, val));
+		}
+	}
+
+	m_stPicture.ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
+	HBITMAP hBitmap = (HBITMAP)cImage.Detach();
+	m_stPicture.SetBitmap(hBitmap);
+}
 
 void CviewerDlg::OnClickedButtonOpen()
 {
@@ -207,30 +230,37 @@ void CviewerDlg::OnClickedButtonOpen()
 	if (fileDlg.DoModal() == IDOK)
 	{
 		CString path = fileDlg.GetPathName();
-		CString extension = path.Right(4); 
+		CString extension = path.Right(4);
 		extension.MakeLower();
 
 		if (extension == _T(".raw"))
 		{
-			sfx::vision::imageFile::SfxImageFilePng png;
-			SfxImage2DPtr inputImage(png.Open(path, SfxDeviceType_Host, 0));
 
-			unsigned int width = inputImage->getWidth();
-			unsigned int height = inputImage->getHeight();
+			if (raw.DoModal() == IDOK) {
 
-			cv::Mat image(height, width, getCvDataFormat(*inputImage), inputImage->getChannelCount());
-			size_t stride = width * inputImage->getBpp() * inputImage->getChannelCount();
+				int h = raw.nHeight;
+				int w = raw.nWidth;
+				int c = raw.nChannel;
+				cv::Mat image(h, w, CV_16UC1);
 
-			for (unsigned y = 0; y < height; y++)
-			{
-				void* src = inputImage->getRowPtr(y);
-				void* dst = image.ptr<uchar>(y);
+				// raw 파일 읽어오기
+				std::ifstream input_file(path, std::ios::binary);
+				if (!input_file) {
+					AfxMessageBox(_T("이미지를 불러올 수 없습니다."));
+					return;
+				}
+				// cv::Mat의 데이터에 직접 읽어들임
+				input_file.read(reinterpret_cast<char*>(image.data), w*h * sizeof(uint16_t));
+				m_matImage = image.clone();
+				ResizeImageForControl(m_matImage, m_matImage);
+				//ShowRawImage(m_matImage);
 
-				memcpy(dst, src, stride);
-			}
+				m_matImage_origin = m_matImage.clone();
+				isRaw = true;
+				DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
+				//DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
+			};
 
-			ResizeImageForControl(image, m_matImage);
-			DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
 		}
 		else {
 			CT2CA pszString(path);
@@ -265,38 +295,64 @@ void CviewerDlg::ResizeImageForControl(Mat& srcImg, Mat& dstImg)
 }
 
 
+
+
+
 void CviewerDlg::DisplayImageInPictureControl(Mat& img, UINT nID)
 {
-	CImage cimage;
+	CImage cImage;
+	if (isRaw == true) {
+		// 16비트 이미지를 8비트로 변환 (간단한 방법, 실제 사용 시에는 적절한 스케일링 고려)
+		cv::Mat convertedMat;
+		img.convertTo(convertedMat, CV_8U, 1.0 / 256.0);
 
-	// CImage에 이미지 데이터 할당을 위해 초기화
-	cimage.Create(img.cols, img.rows, 24);
+		// CImage 객체 초기화
+		cImage.Create(convertedMat.cols, convertedMat.rows, 24);
 
-	// cv::Mat에서 CImage로 데이터 복사
-	for (int i = 0; i < img.rows; i++)
-	{
-		for (int j = 0; j < img.cols; j++)
+		// CImage에 데이터 복사
+		for (int y = 0; y < convertedMat.rows; y++) {
+			char* srcRow = convertedMat.ptr<char>(y);
+			for (int x = 0; x < convertedMat.cols; x++) {
+				unsigned char val = srcRow[x];
+				cImage.SetPixel(x, y, RGB(val, val, val));
+			}
+		}
+		m_stPicture.ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
+		HBITMAP hBitmap = (HBITMAP)cImage.Detach();
+		m_stPicture.SetBitmap(hBitmap);
+	}
+	else {
+
+		// CImage에 이미지 데이터 할당을 위해 초기화
+		cImage.Create(img.cols, img.rows, 24);
+
+		// cv::Mat에서 CImage로 데이터 복사
+		for (int i = 0; i < img.rows; i++)
 		{
-			cv::Vec3b pixel = img.at<cv::Vec3b>(i, j);
+			for (int j = 0; j < img.cols; j++)
+			{
+				cv::Vec3b pixel = img.at<cv::Vec3b>(i, j);
 
-			// BGR 포맷을 사용 (OpenCV의 기본)
-			BYTE* pDest = reinterpret_cast<BYTE*>(cimage.GetPixelAddress(j, i));
-			pDest[0] = pixel[0]; // Blue
-			pDest[1] = pixel[1]; // Green
-			pDest[2] = pixel[2]; // Red
+				// BGR 포맷을 사용 (OpenCV의 기본)
+				BYTE* pDest = reinterpret_cast<BYTE*>(cImage.GetPixelAddress(j, i));
+				pDest[0] = pixel[0]; // Blue
+				pDest[1] = pixel[1]; // Green
+				pDest[2] = pixel[2]; // Red
+			}
+		}
+		// Picture Control 핸들 얻기
+		CStatic* pPic = (CStatic*)AfxGetMainWnd()->GetDlgItem(nID);
+
+		// Picture Control에 이미지 표시
+		if (pPic != nullptr)
+		{
+			// 기존에 표시된 이미지가 있다면 제거
+			pPic->ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
+			HBITMAP hBitmap = cImage.Detach(); // CImage에서 HBITMAP 얻기
+			pPic->SetBitmap(hBitmap); // Picture Control에 비트맵 설정
 		}
 	}
-	// Picture Control 핸들 얻기
-	CStatic* pPic = (CStatic*)AfxGetMainWnd()->GetDlgItem(nID);
 
-	// Picture Control에 이미지 표시
-	if (pPic != nullptr)
-	{
-		// 기존에 표시된 이미지가 있다면 제거
-		pPic->ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
-		HBITMAP hBitmap = cimage.Detach(); // CImage에서 HBITMAP 얻기
-		pPic->SetBitmap(hBitmap); // Picture Control에 비트맵 설정
-	}
 }
 
 
@@ -534,34 +590,3 @@ BOOL CviewerDlg::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
 	}
 }
 
-int CviewerDlg::getCvDataFormat(SfxImage2D image)
-{
-	int cvFormat = CV_8UC1;
-	switch (image.getDataFormat())
-	{
-	case SfxDataFormat_8U:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_16S:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_16U:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_32S:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_32U:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_32F:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	case SfxDataFormat_64F:
-		cvFormat = CV_MAKETYPE(CV_8U, image.getChannelCount());
-		break;
-	default:
-		sfxGenericExceptionMacro(SfxInvalidArgsException, L"Invalid Data Format");
-	}
-	return cvFormat;
-}

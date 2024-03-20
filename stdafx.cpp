@@ -5,6 +5,4 @@
 
 #include "stdafx.h"
 
-#include "sfx.cpp"
-
 
