@@ -71,6 +71,7 @@ public:
 	static CPoint m_ptStart;
 	static CPoint m_ptLastEnd;
 	static bool isRaw;
+	static bool is8bit;
 
 	bool m_bWheel;
 	afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);

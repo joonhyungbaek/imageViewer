@@ -16,6 +16,8 @@ CRect CviewerDlg::rect;
 CPoint CviewerDlg::m_ptStart;
 CPoint CviewerDlg::m_ptLastEnd;
 bool CviewerDlg::isRaw = false;
+bool CviewerDlg::is8bit = false;
+
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
 
 
@@ -235,31 +237,45 @@ void CviewerDlg::OnClickedButtonOpen()
 
 		if (extension == _T(".raw"))
 		{
-
 			if (raw.DoModal() == IDOK) {
 
 				int h = raw.nHeight;
 				int w = raw.nWidth;
 				int c = raw.nChannel;
-				cv::Mat image(h, w, CV_16UC1);
+				int t = raw.nType;
+				int type;
 
+				//t가 0일 경우 8비트, 1일경우 16비트 
+				if (t == 0) {
+					is8bit = true;
+					if (c == 1) type = CV_8U;
+				}
+				else if (t == 1) {
+					is8bit = false;
+					if (c == 1) type = CV_16UC1;
+				}else{
+					is8bit = true;
+					type = CV_8UC3;
+				}
+				
+
+				cv::Mat image(h, w, type);
 				// raw 파일 읽어오기
 				std::ifstream input_file(path, std::ios::binary);
 				if (!input_file) {
 					AfxMessageBox(_T("이미지를 불러올 수 없습니다."));
 					return;
 				}
-				// cv::Mat의 데이터에 직접 읽어들임
-				input_file.read(reinterpret_cast<char*>(image.data), w*h * sizeof(uint16_t));
+				isRaw = true;
+				if (t == 0)
+					input_file.read(reinterpret_cast<char*>(image.data), w*h * sizeof(uint8_t));
+				if (t == 1)
+					input_file.read(reinterpret_cast<char*>(image.data), w*h * sizeof(uint16_t));
 				m_matImage = image.clone();
 				ResizeImageForControl(m_matImage, m_matImage);
-				//ShowRawImage(m_matImage);
 
-				m_matImage_origin = m_matImage.clone();
-				isRaw = true;
 				DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
-				//DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
-			};
+			}
 
 		}
 		else {
@@ -279,23 +295,19 @@ void CviewerDlg::OnClickedButtonOpen()
 
 			// Picture Control에 이미지 표시
 			DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
+			isRaw = false;
 		}
 		m_matImage_origin = m_matImage.clone();
 		m_tabControl.ShowWindow(SW_SHOW);
+
 	}
 }
 
 
 void CviewerDlg::ResizeImageForControl(Mat& srcImg, Mat& dstImg)
 {
-	pPicControl = (CStatic*)AfxGetMainWnd()->GetDlgItem(IDC_PC_VIEW);
-	pPicControl->GetClientRect(&rect); //	의 크기 얻기
-
 	resize(srcImg, dstImg, cv::Size(rect.Width(), rect.Height()));
 }
-
-
-
 
 
 void CviewerDlg::DisplayImageInPictureControl(Mat& img, UINT nID)
@@ -303,26 +315,39 @@ void CviewerDlg::DisplayImageInPictureControl(Mat& img, UINT nID)
 	CImage cImage;
 	if (isRaw == true) {
 		// 16비트 이미지를 8비트로 변환 (간단한 방법, 실제 사용 시에는 적절한 스케일링 고려)
-		cv::Mat convertedMat;
-		img.convertTo(convertedMat, CV_8U, 1.0 / 256.0);
+		if (!is8bit) {
+			cv::Mat convertedMat;
+			img.convertTo(convertedMat, CV_8U, 1.0 / 256.0);
+			cImage.Create(convertedMat.cols, convertedMat.rows, 24);
 
-		// CImage 객체 초기화
-		cImage.Create(convertedMat.cols, convertedMat.rows, 24);
-
-		// CImage에 데이터 복사
-		for (int y = 0; y < convertedMat.rows; y++) {
-			char* srcRow = convertedMat.ptr<char>(y);
-			for (int x = 0; x < convertedMat.cols; x++) {
-				unsigned char val = srcRow[x];
-				cImage.SetPixel(x, y, RGB(val, val, val));
+			// CImage에 데이터 복사
+			for (int y = 0; y < convertedMat.rows; y++) {
+				char* srcRow = convertedMat.ptr<char>(y);
+				for (int x = 0; x < convertedMat.cols; x++) {
+					unsigned char val = srcRow[x];
+					cImage.SetPixel(x, y, RGB(val, val, val));
+				}
 			}
 		}
-		m_stPicture.ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
-		HBITMAP hBitmap = (HBITMAP)cImage.Detach();
-		m_stPicture.SetBitmap(hBitmap);
+		else {
+			cv::Mat convertedMat;
+
+			// 이미지를 8비트로 변환하지 않고 그대로 사용
+			img.copyTo(convertedMat);
+
+			cImage.Create(convertedMat.cols, convertedMat.rows, 24);
+
+			// CImage에 데이터 복사
+			for (int y = 0; y < convertedMat.rows; y++) {
+				char* srcRow = convertedMat.ptr<char>(y);
+				for (int x = 0; x < convertedMat.cols; x++) {
+					unsigned char val = srcRow[x];
+					cImage.SetPixel(x, y, RGB(val, val, val));
+				}
+			}
+		}
 	}
 	else {
-
 		// CImage에 이미지 데이터 할당을 위해 초기화
 		cImage.Create(img.cols, img.rows, 24);
 
@@ -340,17 +365,16 @@ void CviewerDlg::DisplayImageInPictureControl(Mat& img, UINT nID)
 				pDest[2] = pixel[2]; // Red
 			}
 		}
-		// Picture Control 핸들 얻기
-		CStatic* pPic = (CStatic*)AfxGetMainWnd()->GetDlgItem(nID);
 
-		// Picture Control에 이미지 표시
-		if (pPic != nullptr)
-		{
-			// 기존에 표시된 이미지가 있다면 제거
-			pPic->ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
-			HBITMAP hBitmap = cImage.Detach(); // CImage에서 HBITMAP 얻기
-			pPic->SetBitmap(hBitmap); // Picture Control에 비트맵 설정
-		}
+	}
+	CStatic* pPic = (CStatic*)AfxGetMainWnd()->GetDlgItem(nID);
+
+	if (pPic != nullptr)
+	{
+		// 기존에 표시된 이미지가 있다면 제거
+		pPic->ModifyStyle(0xF, SS_BITMAP, SWP_NOSIZE);
+		HBITMAP hBitmap = cImage.Detach(); // CImage에서 HBITMAP 얻기
+		pPic->SetBitmap(hBitmap); // Picture Control에 비트맵 설정
 	}
 
 }
@@ -448,7 +472,6 @@ void CviewerDlg::RotateRight()
 
 void CviewerDlg::Resize(int h, int w)
 {
-
 	if (h <= 0) h = 1;
 	if (h > rect.Height()) h = rect.Height();
 	if (w <= 0) w = 1;
@@ -512,7 +535,6 @@ void CviewerDlg::OnLButtonUp(UINT nFlags, CPoint point)
 
 	// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
 	if (m_tabControl.GetCurSel() == 3) {
-
 		if (m_bDragging)
 		{
 			m_bDragging = false;
@@ -576,14 +598,12 @@ BOOL CviewerDlg::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
 			// 휠을 위로 스크롤할 때 확대
 			if (newSize.width > rect.Width() || newSize.height > rect.Height())
 				return 1;
-
 			cv::resize(m_matImage, m_matImage, cv::Size(), scaleFactor, scaleFactor);
 		}
 		else {
 			// 휠을 아래로 스크롤할 때 축소
 			cv::resize(m_matImage, m_matImage, cv::Size(), 1 / scaleFactor, 1 / scaleFactor);
 		}
-
 		DisplayImageInPictureControl(m_matImage, IDC_PC_VIEW);
 		// 마우스 휠 이벤트를 부모 클래스에 전달합니다.
 		return CDialogEx::OnMouseWheel(nFlags, zDelta, pt);

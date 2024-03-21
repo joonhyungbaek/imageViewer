@@ -23,5 +23,8 @@ protected:
 public:
 	afx_msg void OnClickedButtonRaw();
 	int nWidth, nHeight, nChannel;
+	int nType;
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
+	virtual BOOL OnInitDialog();
+	afx_msg void OnSelchangeComboRawType();
 };
